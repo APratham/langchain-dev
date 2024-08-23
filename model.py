@@ -34,7 +34,8 @@ text_splitter = RecursiveCharacterTextSplitter(
     chunk_overlap=0,
     )
 
-embeddings = OpenAIEmbeddings()
+embeddings = OpenAIEmbeddings(
+)
 
 pc = Pinecone(
     api_key=os.getenv("PINECONE_API_KEY")
@@ -65,18 +66,67 @@ chain_two = LLMChain(llm=llm, prompt=second_prompt)
 
 overall_chain = SimpleSequentialChain(chains=[chain, chain_two], verbose=True)
 
-explanation = overall_chain.run("regularisation")
+explanation = overall_chain.run("autoencoder")
 
-texts = text_splitter.create_documents([explanation])
+documents = text_splitter.create_documents([explanation])
 
 
-print(texts[0].page_content)
+print(documents[0].page_content)
 
-query_result = embeddings.embed_query(texts[0].page_content)
+query_result = embeddings.embed_query(documents[0].page_content)
 print(query_result)
 print("Query vector dimension:", len(query_result))  # Print the dimension of the query vector
 
+print(explanation + "\n") # Print the explanation
+print(documents)        # Print the text
 
-search = PineconeVectorStore.from_documents(texts, embeddings, index_name=index_name)
-result = search.similarity_search(query)
-print(result)
+vectorstore_from_docs = PineconeVectorStore.from_documents(
+    documents,
+    index_name=index_name,
+    embedding=embeddings  # Ensure this is the function, not precomputed embeddings
+)
+
+indices = pc.list_indexes()
+print("Available indices:", indices)
+
+print("Index information:")
+# Make sure embeddings are generated correctly
+document_vectors = [embeddings.embed_query(doc.page_content) for doc in documents]
+
+for i, vector in enumerate(document_vectors):
+    print(f"Document {i} vector length: {len(vector)}")
+
+# Index the documents in Pinecone
+vectorstore_from_docs = PineconeVectorStore.from_documents(
+    documents,
+    index_name=index_name,
+    embedding=embeddings
+)
+
+# Get index information directly from Pinecone client
+index_info = pc.describe_index(index_name)
+print("Index information:", index_info)
+
+
+# Perform similarity search
+query = "Please explain the concept of autoencoder in simple terms like I'm five"
+results = vectorstore_from_docs.similarity_search(query)
+
+print("Results:" + "\n")  
+print(results)     
+
+
+
+#vectorstore_from_texts = PineconeVectorStore.from_texts(
+#    texts, 
+#    index_name=index_name,
+#    embeddings=embeddings
+#    )
+
+#query = "Explain the concept of regularisation in simple terms like I'm five"
+
+#response = search.similarity_search(query)
+#print(response)
+#print(query)
+#result = search.similarity_search(query)
+#print(result)
